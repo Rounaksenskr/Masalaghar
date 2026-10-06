@@ -1,0 +1,144 @@
+// Masala Ghar - Prisma Database Schema
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User roles: Customer and Vendor
+enum Role {
+  CUSTOMER
+  VENDOR
+}
+
+// Order lifecycle states
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+// Payment states
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(CUSTOMER)
+  phone     String?
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  products Product[] // Products created if user is a VENDOR
+  cart     Cart?     // Cart if user is a CUSTOMER
+  orders   Order[]   // Orders placed by CUSTOMER
+  reviews  Review[]  // Reviews written by CUSTOMER
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  name        String
+  description String
+  category    String   // Spices, Whole spices, Masala, Organic seeds, Herbs, Vegetables
+  origin      String?  // Regional origin (e.g., "Idukki, Kerala", "Nagaur, Rajasthan")
+  unit        String?  @default("250g") // Package weight / count (e.g., "250g", "500g", "100 Seeds")
+  price       Float
+  discount    Float?   @default(0) // Discount percentage
+  stock       Int      @default(0)
+  image       String   // Cloudinary URL or image path
+  vendorId    Int
+  vendor      User     @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  cartItems  CartItem[]
+  orderItems OrderItem[]
+  reviews    Review[]
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  rating    Int      @default(5) // 1 to 5 stars
+  comment   String
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  userId    Int        @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cartId    Int
+  cart      Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([cartId, productId])
+}
+
+model Order {
+  id              Int         @id @default(autoincrement())
+  userId          Int
+  user            User        @relation(fields: [userId], references: [id])
+  totalAmount     Float
+  status          OrderStatus @default(PENDING)
+  deliveryAddress String
+  customerPhone   String?
+  items           OrderItem[]
+  payment         Payment?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId Int
+  product   Product  @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float    // Historical price snapshot at purchase time
+  vendorId  Int      // Filter orders by vendor
+  createdAt DateTime @default(now())
+}
+
+model Payment {
+  id                Int           @id @default(autoincrement())
+  orderId           Int           @unique
+  order             Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  amount            Float
+  status            PaymentStatus @default(PENDING)
+  method            String?       @default("RAZORPAY")
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
